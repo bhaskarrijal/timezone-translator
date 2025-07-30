@@ -10,7 +10,15 @@ const app = express()
 const PORT = process.env.PORT || 3001
 
 // middleware 
-app.use(cors())
+app.use(cors({
+  origin: [
+    'https://tt.bhaskarrijal.me',
+    'https://www.tt.bhaskarrijal.me'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
 app.use(express.json())
 
 // user prompt lai JSON ma parse garne schema
