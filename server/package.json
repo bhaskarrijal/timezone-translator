@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build": "npm install && npm install --only=dev && npm install --only=production"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.2.22",
