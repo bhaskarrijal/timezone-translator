@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import rateLimit from 'express-rate-limit'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateObject } from 'ai'
 import { z } from 'zod'
@@ -8,6 +9,14 @@ import { DateTime } from 'luxon'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+// rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api/', apiLimiter)
 
 // middleware 
 app.use(cors({
