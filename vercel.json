@@ -2,10 +2,5 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install --legacy-peer-deps",
-  "framework": "vite",
-  "functions": {
-    "server/server.js": {
-      "runtime": "nodejs18.x"
-    }
-  }
+  "framework": "vite"
 } 
