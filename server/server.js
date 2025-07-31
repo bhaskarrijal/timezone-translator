@@ -61,7 +61,7 @@ app.post('/api/translate', async (req, res) => {
     const { object: parsed } = await generateObject({
       model: googleAI("gemini-2.0-flash"),
       schema: parseSchema,
-      system: `You are a JSON parser that extracts date-time translation details.
+      system: `You are a JSON parser that extracts date-time translation details from the query.
 Return only a JSON object with the following structure:
 {
   "datetime": { "date": "YYYY-MM-DD", "time": "HH:mm", "range_end": null },
@@ -69,7 +69,7 @@ Return only a JSON object with the following structure:
   "to_timezone": "IANA_TIMEZONE"
 }
 Do not include any explanations or extra keys.`,
-      prompt: prompt,
+      prompt: `<query>${prompt}</query>`,
     })
 
 
