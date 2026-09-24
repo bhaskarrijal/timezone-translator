@@ -334,7 +334,7 @@ button:disabled {
 
 .result-side {
   border: 1px solid var(--result-border);
-  border-radius: 9px;
+  border-radius: 0;
   background: var(--result-surface);
   padding: 20px;
 }
@@ -451,6 +451,10 @@ footer a {
 }
 
 @media (max-width: 560px) {
+  .site-hero p {
+    font-size: .8125rem;
+  }
+
   .site-hero-inner {
     padding: 46px 0 44px;
   }

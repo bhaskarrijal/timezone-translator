@@ -8,21 +8,27 @@
     * { box-sizing: border-box; }
     html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
     body { color: #1e2932; background: #f8f7f3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .hero { height: 220px; padding: 54px 92px; color: #fff; background: linear-gradient(to bottom, #102d51, #2c6098); }
-    h1 { margin: 0 0 4px; font-size: 58px; line-height: 1.08; letter-spacing: -2.3px; }
+    .hero { height: 160px; padding: 34px 92px; color: #fff; background: linear-gradient(to bottom, #102d51, #2c6098); }
+    h1 { margin: 0 0 4px; font-size: 54px; line-height: 1.08; letter-spacing: -2.3px; }
     .hero p { margin: 0; color: rgba(255,255,255,.88); font-size: 21px; }
-    .content { padding: 27px 92px 0; }
+    .content { padding: 20px 92px 0; }
     .prompt-label { font-size: 17px; font-weight: 650; }
-    .prompt { height: 58px; margin-top: 9px; padding: 16px 20px; border: 1px solid #aab5ba; border-radius: 9px; background: #fff; font-size: 20px; }
-    h2 { margin: 24px 0 12px; font-size: 24px; line-height: 1.1; }
+    .prompt { height: 52px; margin-top: 8px; padding: 13px 18px; border: 1px solid #aab5ba; border-radius: 0; background: #fff; font-size: 20px; }
+    .translate-row { position: relative; isolation: isolate; height: 44px; margin-top: 12px; }
+    .translate-button { position: relative; z-index: 1; height: 44px; padding: 10px 18px; border: 1px solid #102d51; border-radius: 0; color: #fff; background: #102d51; font: inherit; font-size: 16px; }
+    .pigeon-hills { position: absolute; inset: 0; width: 100%; height: 100%; fill: #1e2932; z-index: -1; }
+    .hills-far { opacity: .07; }
+    .hills-near { opacity: .1; }
+    .pixel-pigeon { position: absolute; left: 65%; top: 3px; color: #102d51; }
+    h2 { margin: 16px 0 10px; font-size: 22px; line-height: 1.1; }
     .cards { display: flex; gap: 16px; }
-    .card { flex: 1; height: 184px; padding: 20px 22px; border: 1px solid #e8e3d9; border-radius: 9px; background: #fffdfa; }
+    .card { flex: 1; height: 158px; padding: 14px 20px; border: 1px solid #e8e3d9; border-radius: 0; background: #fffdfa; }
     .kind { margin: 0; color: #52616b; font-size: 12px; font-weight: 650; text-transform: uppercase; }
-    .place { margin: 7px 0 0; font-size: 27px; font-weight: 650; letter-spacing: -.5px; }
-    .zone { margin: 2px 0 17px; color: #52616b; font-size: 13px; }
-    .time { font-size: 31px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .place { margin: 7px 0 0; font-size: 25px; font-weight: 650; letter-spacing: -.5px; }
+    .zone { margin: 2px 0 12px; color: #52616b; font-size: 13px; }
+    .time { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
     .offset { margin-left: 9px; color: #52616b; font-size: 13px; font-weight: 400; }
-    .date { margin-top: 2px; font-size: 15px; }
+    .date { margin-top: 2px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -33,6 +39,17 @@
   <main class="content">
     <div class="prompt-label">Your time request</div>
     <div class="prompt">1 July 2026, 5pm Nepal time to London time</div>
+    <div class="translate-row">
+      <button class="translate-button" type="button">Translate</button>
+    <svg class="pigeon-hills" viewBox="0 0 600 48" preserveAspectRatio="none" shapeRendering="crispEdges" aria-hidden="true" focusable="false">
+      <path class="hills-far" d="M0 40H20V36H36V32H52V28H64V24H76V20H88V24H100V28H116V32H136V36H160V32H176V28H188V24H200V20H212V16H224V12H236V16H248V20H260V24H276V28H292V32H316V36H340V32H356V28H368V24H380V20H392V16H404V20H416V24H428V28H444V32H468V36H488V32H504V28H520V24H532V28H548V32H568V36H588V40H600V48H0Z" />
+      <path class="hills-near" d="M0 44H24V42H48V40H68V38H88V36H112V38H136V40H160V42H192V44H224V42H248V40H268V38H288V34H308V32H328V34H348V38H372V40H400V42H428V44H456V42H476V40H496V38H520V36H540V38H564V40H584V42H600V48H0Z" />
+    </svg>
+          <svg class="pixel-pigeon" width="28" height="24" viewBox="0 0 28 24" fill="currentColor" shapeRendering="crispEdges" focusable="false">
+            <path d="M2 12H6V14H10V12H18V8H24V10H26V12H24V16H20V18H12V16H6V14H2Z" />
+            <path class="pigeon-wing-up" d="M10 14V8H8V4H10V2H12V4H14V6H16V10H18V14Z" />
+          </svg>
+    </div>
     <h2>Conversion</h2>
     <div class="cards">
       <section class="card">
