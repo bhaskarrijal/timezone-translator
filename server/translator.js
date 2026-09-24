@@ -1,12 +1,13 @@
 import * as chrono from 'chrono-node'
 import { DateTime } from 'luxon'
-import { findPlaces, resolveZoneText, validZone, zoneChoices } from './zones.js'
+import { dominantCity, findPlaces, resolveZoneText, validZone, zoneChoices } from './zones.js'
 import { normalizeNepaliWords } from './nepali.js'
 
 const invalid = (code, message) => ({ status: 'invalid', code, message })
 const choice = (field, question, options) => ({ status: 'needs_clarification', field, question, inputKind: 'choice', options })
 const textQuestion = (field, question) => ({ status: 'needs_clarification', field, question, inputKind: 'text', options: [] })
 const formatDirective = /\b(12|24)\s*-?\s*(?:hours?|hrs?|h)(?:\s+format)?\b/i
+const localTimePhrase = /\b(?:(?:my|our)\s+(?:local\s+)?(?:time|timezone)|local\s+(?:time|timezone)|here)\b/gi
 
 function requestedTimeFormat(prompt, answers, defaultFormat = '24h') {
   const explicit = prompt.match(formatDirective)
@@ -53,14 +54,20 @@ function isCurrentTimeQuery(prompt, mention) {
   return remainder === ''
 }
 
+function isCurrentInstantQuery(prompt, mentions) {
+  const expression = withoutPlaces(prompt, mentions).replace(formatDirective, ' ')
+  if (!/\b(?:current|now)\b/.test(expression)) return false
+  return expression.replace(/\b(?:what|is|it|the|current|local|time|timezone|right|now|my|our|here|from|to|into|in|at|for|please|tell|me|convert|show)\b|[\s,.!?]/g, '') === ''
+}
+
 function placeLabel(mention, zone) {
-  if (mention.raw) return zone.split('/').at(-1).replaceAll('_', ' ')
+  if (validZone(mention.raw)) return zone.split('/').at(-1).replaceAll('_', ' ')
   const name = mention.key.replace(/ time$/, '')
   if (['uk', 'sf', 'sfo', 'nyc', 'la', 'dc', 'hk', 'kl', 'utc', 'gmt'].includes(name)) return name.toUpperCase()
   return name.replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
-function selectZone(field, mention, answer) {
+function selectZone(field, mention, answer, assumptions) {
   if (answer !== undefined) {
     const resolved = resolveZoneText(answer)
     if (resolved) {
@@ -74,6 +81,16 @@ function selectZone(field, mention, answer) {
   if (!mention) return null
   const options = zoneChoices(mention)
   if (options.length === 1) return options[0].value
+  const countryDefault = mention.candidates.find(candidate => candidate.country && candidate.defaultCity)
+  if (countryDefault) {
+    assumptions.push({ code: 'country_timezone_default', message: `Using ${countryDefault.defaultCity} time (${countryDefault.zone}) for ${mention.key}. Specify a city for a different timezone.` })
+    return countryDefault.zone
+  }
+  const cityDefault = dominantCity(mention)
+  if (cityDefault) {
+    assumptions.push({ code: 'city_timezone_default', message: `Using ${cityDefault.label} (${cityDefault.zone}) for ${mention.key}.` })
+    return cityDefault.zone
+  }
   if (options.length === 0) return invalid('unknown_timezone', `I couldn't resolve ${mention.key} to a timezone.`)
   if (options.length > 12) return textQuestion(field, `Which city or IANA timezone do you mean by “${mention.key}”?`)
   return choice(field, `Which timezone do you mean by “${mention.key}”?`, options)
@@ -84,6 +101,7 @@ function getZones(prompt, deviceTimeZone, answers, assumptions) {
   if (found.length > 2) return invalid('too_many_places', 'Use one source and one destination timezone.')
   let sourceMention = null
   let targetMention = null
+  let localTarget = false
   if (found.length === 2) {
     [sourceMention, targetMention] = found
     const between = words.slice(found[0].end, found[1].start)
@@ -98,10 +116,12 @@ function getZones(prompt, deviceTimeZone, answers, assumptions) {
   if (found.length === 1) {
     const mention = found[0]
     const before = words.slice(0, mention.start)
-    if (before.at(-1) === 'to' || before.at(-1) === 'into') targetMention = mention
+    const after = words.slice(mention.end).join(' ')
+    localTarget = /\b(?:to|into|in)\s+(?:(?:my|our)\s+(?:local\s+)?(?:time|timezone)|local\s+(?:time|timezone)|here)\b/.test(after)
+    if (!localTarget && ['to', 'into', 'in', 'for'].includes(before.at(-1))) targetMention = mention
     else sourceMention = mention
   }
-  const source = selectZone('sourceZone', sourceMention, answers.sourceZone)
+  const source = selectZone('sourceZone', sourceMention, answers.sourceZone, assumptions)
   if (typeof source === 'object' && source) return source
   let sourceZone = source
   if (!sourceZone) {
@@ -109,8 +129,13 @@ function getZones(prompt, deviceTimeZone, answers, assumptions) {
     sourceZone = deviceTimeZone
     assumptions.push({ code: 'device_source_timezone', message: `Source timezone assumed from your device: ${sourceZone}.` })
   }
-  const target = selectZone('targetZone', targetMention, answers.targetZone)
+  let target = selectZone('targetZone', targetMention, answers.targetZone, assumptions)
   if (typeof target === 'object' && target) return target
+  if (!target && localTarget) {
+    if (!validZone(deviceTimeZone)) return textQuestion('targetZone', 'What is your local city or IANA timezone?')
+    target = deviceTimeZone
+    assumptions.push({ code: 'device_target_timezone', message: `Destination timezone taken from your device: ${target}.` })
+  }
   if (!target) return textQuestion('targetZone', 'What is the destination city or IANA timezone?')
   return { sourceZone, targetZone: target, found, words }
 }
@@ -167,8 +192,10 @@ export function translate({ prompt, deviceTimeZone, answers = {} }, now = DateTi
   }
   const assumptions = []
   const mentions = findPlaces(prompt).found
-  if (mentions.length === 1 && isCurrentTimeQuery(prompt, mentions[0])) {
-    const zone = selectZone('sourceZone', mentions[0], answers.sourceZone)
+  const currentInstant = isCurrentInstantQuery(prompt, mentions)
+  const currentConversion = currentInstant && /\b(?:to|into|convert)\b/.test(withoutPlaces(prompt, mentions))
+  if (!currentConversion && mentions.length === 1 && isCurrentTimeQuery(prompt, mentions[0])) {
+    const zone = selectZone('sourceZone', mentions[0], answers.sourceZone, assumptions)
     if (typeof zone === 'object' && zone) return zone
     if (!zone) return invalid('unknown_timezone', 'Enter a city or IANA timezone.')
     const current = now.setZone(zone).startOf('second')
@@ -181,16 +208,20 @@ export function translate({ prompt, deviceTimeZone, answers = {} }, now = DateTi
       target: null,
       timeFormat,
       display: { source: { start: current.toFormat(timeFormat === '12h' ? 'h:mm a' : 'HH:mm'), end: null }, target: null },
-      assumptions: [],
+      assumptions,
     }
   }
-  const timeFormat = requestedTimeFormat(prompt, answers)
+  const timeFormat = requestedTimeFormat(prompt, answers, currentInstant ? '12h' : '24h')
   const zoneResult = getZones(prompt, deviceTimeZone, answers, assumptions)
   if (zoneResult.status) return zoneResult
   const { sourceZone, targetZone, found } = zoneResult
+  if (currentInstant) {
+    return conversionResult(now.setZone(sourceZone).startOf('second'), null, sourceZone, targetZone, timeFormat, assumptions)
+  }
 
   // Remove recognized place names before passing the date expression to Chrono.
   let expression = withoutPlaces(prompt, found)
+  expression = expression.replace(localTimePhrase, ' ')
   expression = expression.replace(formatDirective, ' ')
   expression = expression.replace(/(\d(?::\d{2})?(?:am|pm)?)\s+(?:to|until|through)\s+(\d)/g, '$1-$2')
   expression = expression.replace(/\b(?:ma|bata|from|to|into|in|at|time|ko)\b/g, ' ').replace(/\s+/g, ' ').trim()
@@ -256,6 +287,10 @@ export function translate({ prompt, deviceTimeZone, answers = {} }, now = DateTi
   const end = endValues ? wallTime(endValues, sourceZone, 'endOccurrence', answers) : null
   if (end?.status) return end
   if (end && end.toMillis() <= start.toMillis()) return invalid('invalid_range', 'The range end must be after the start.')
+  return conversionResult(start, end, sourceZone, targetZone, timeFormat, assumptions)
+}
+
+function conversionResult(start, end, sourceZone, targetZone, timeFormat, assumptions) {
   const iso = value => value ? value.toISO({ suppressMilliseconds: true }).replace(/Z$/, '+00:00') : null
   const formatted = value => value ? value.toFormat(timeFormat === '12h' ? 'h:mm a' : 'HH:mm') : null
   const targetStart = start.setZone(targetZone)

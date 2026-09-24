@@ -344,14 +344,6 @@ button:disabled {
   padding: 20px;
 }
 
-.result-side h3 {
-  margin: 0;
-  color: var(--muted);
-  font-size: .72rem;
-  /* letter-spacing: .1em; */
-  text-transform: uppercase;
-}
-
 .place {
   margin: 8px 0 0;
   font-size: clamp(1.3rem, 3vw, 1.55rem);

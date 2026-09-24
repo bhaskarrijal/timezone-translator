@@ -8,7 +8,7 @@ type DisplayTime = { start: string; end: string | null }
 type ZoneTime = { zone: string; start: string; end: string | null }
 type Result =
   | { status: 'ok'; mode: 'conversion'; source: ZoneTime; target: ZoneTime; timeFormat: '12h' | '24h'; display: { source: DisplayTime; target: DisplayTime }; assumptions: { code: string; message: string }[] }
-  | { status: 'ok'; mode: 'current'; place: string; source: ZoneTime; target: null; timeFormat: '12h' | '24h'; display: { source: DisplayTime; target: null }; assumptions: [] }
+  | { status: 'ok'; mode: 'current'; place: string; source: ZoneTime; target: null; timeFormat: '12h' | '24h'; display: { source: DisplayTime; target: null }; assumptions: { code: string; message: string }[] }
   | { status: 'needs_clarification'; field: string; question: string; inputKind: 'choice' | 'text'; options: Option[] }
   | { status: 'invalid'; code: string; message: string }
 
@@ -28,10 +28,9 @@ function offsetLabel(iso: string) {
   return iso.match(/([+-]\d{2}:\d{2})$/)?.[1] ?? '+00:00'
 }
 
-function DateTimeFields({ label, place, zone, start, end, display }: { label?: string; place?: string; zone: string; start: string; end: string | null; display: DisplayTime }) {
+function DateTimeFields({ place, zone, start, end, display }: { place?: string; zone: string; start: string; end: string | null; display: DisplayTime }) {
   const rows = [{ label: end ? 'Start' : null, value: start, time: display.start }, ...(end ? [{ label: 'End', value: end, time: display.end }] : [])]
   return <div className="result-side">
-    {label && <h3>{label}</h3>}
     <p className="place">{place ?? placeName(zone)}</p>
     <p className="zone">{zone}</p>
     {rows.map(row => <div className="time-row" key={row.label}>
@@ -168,8 +167,8 @@ function App() {
     {result?.status === 'ok' && <section className="response conversion" aria-live="polite">
       <h2>{result.mode === 'current' ? 'Current time' : 'Conversion'}</h2>
       <div className={`result-grid${result.mode === 'current' ? ' single' : ''}`}>
-        <DateTimeFields label={result.mode === 'conversion' ? 'Source' : undefined} place={result.mode === 'current' ? result.place : undefined} {...result.source} display={result.display.source} />
-        {result.mode === 'conversion' && <DateTimeFields label="Destination" {...result.target} display={result.display.target} />}
+        <DateTimeFields place={result.mode === 'current' ? result.place : undefined} {...result.source} display={result.display.source} />
+        {result.mode === 'conversion' && <DateTimeFields {...result.target} display={result.display.target} />}
       </div>
       {result.assumptions.length > 0 && <div className="assumptions">
         {result.assumptions.map(item => <p key={item.code}>{item.message}</p>)}
@@ -179,7 +178,7 @@ function App() {
     {result?.status === 'invalid' && <p className="error" role="alert">{result.message}</p>}
     {networkError && <p className="error" role="alert">{networkError}</p>}
 
-    <p className="disclaimer">This app doesn't save your prompt, browser timezone, or clarification answers. They're sent to the server for the calculation, with no account, saved history, or session kept for them. It first cleans up common English and romanized Nepali wording, then reads the time, date, and any range you gave. Place names and shortcuts like SF are matched to IANA timezones. Each time is converted using the offset that applies on its actual date, so daylight saving changes are included rather than treating the difference between two places as fixed all year. If you leave out the date, it uses today in the source timezone. If you leave out the source, it uses the timezone your browser reports and marks that as an assumption. A range that ends earlier than it starts is treated as ending the next day. If a city name, numeric date, AM/PM choice, or repeated daylight saving hour could mean more than one thing, it asks before converting. A local time that never occurs during a clock change is flagged as well. No AI model is involved; the result is calculated with code.</p>
+    <p className="disclaimer">This app doesn't save your prompt, browser timezone, or clarification answers. They're sent to the server for the calculation, with no account, saved history, or session kept for them. It first cleans up common English and romanized Nepali wording, then reads the time, date, and any range you gave. Place names and shortcuts like SF are matched to IANA timezones. Each time is converted using the offset that applies on its actual date, so daylight saving changes are included rather than treating the difference between two places as fixed all year. If you leave out the date, it uses today in the source timezone. If you leave out the source, it uses the timezone your browser reports and marks that as an assumption. “My time” and “local time” also use your browser timezone. A range that ends earlier than it starts is treated as ending the next day. If a city name, numeric date, AM/PM choice, or repeated daylight saving hour could mean more than one thing, it asks before converting. A local time that never occurs during a clock change is flagged as well. No AI model is involved; the result is calculated with code.</p>
 
     <footer>
       <span>Built by <a href="https://bhaskarrijal.me" target="_blank" rel="noopener noreferrer">Bhaskar Rijal</a></span>

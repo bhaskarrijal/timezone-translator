@@ -100,6 +100,37 @@ describe('translation', () => {
     expect(request('5pm to London', {}, '').field).toBe('sourceZone')
     expect(request('5pm America/New_York to Europe/London').source.start).toContain('2026-09-24')
   })
+  test('country defaults preserve the actual device source timezone', () => {
+    const result = request('5pm to brazil time')
+    expect(result).toMatchObject({ status: 'ok', source: { zone: 'Asia/Kathmandu', start: '2026-09-25T17:00:00+05:45' }, target: { zone: 'America/Sao_Paulo', start: '2026-09-25T08:15:00-03:00' } })
+    expect(result.assumptions.map(x => x.code)).toContain('device_source_timezone')
+    expect(result.assumptions.map(x => x.code)).toContain('country_timezone_default')
+    expect(request('5pm to Brazil', {}, 'America/New_York')).toMatchObject({ status: 'ok', source: { start: '2026-09-24T17:00:00-04:00' }, target: { start: '2026-09-24T18:00:00-03:00' } })
+    expect(request('5pm to Brazil', {}, '')).toMatchObject({ status: 'needs_clarification', field: 'sourceZone' })
+    expect(request('5pm to Brazil', {}, 'Invalid/Zone').field).toBe('sourceZone')
+  })
+  test('local-time wording and destination prepositions avoid redundant questions', () => {
+    for (const prompt of ['5pm my time to Brazil', '5pm local time to Brazil', '5pm from my time to Brazil', '5pm here to Brazil', 'convert 5pm into Brazil time', '5pm for Brazil', '5pm in Brazil']) {
+      expect(request(prompt)).toMatchObject({ status: 'ok', source: { zone: 'Asia/Kathmandu' }, target: { zone: 'America/Sao_Paulo' } })
+    }
+    expect(request('what is 5pm in London')).toMatchObject({ status: 'ok', source: { zone: 'Asia/Kathmandu' }, target: { zone: 'Europe/London' } })
+    expect(request('3 to 5pm in London')).toMatchObject({ status: 'ok', source: { start: '2026-09-25T15:00:00+05:45', end: '2026-09-25T17:00:00+05:45' } })
+    for (const prompt of ['5pm London to my time', '5pm London in local time', '5pm from London to here']) {
+      expect(request(prompt)).toMatchObject({ status: 'ok', source: { zone: 'Europe/London' }, target: { zone: 'Asia/Kathmandu', start: '2026-09-25T21:45:00+05:45' } })
+    }
+    expect(request('5pm London to my time', {}, '').field).toBe('targetZone')
+    expect(request('5pm from London').field).toBe('targetZone')
+  })
+  test('explicit Brazilian cities and clarification answers override the country default', () => {
+    expect(request('5pm to Manaus Brazil')).toMatchObject({ status: 'ok', target: { zone: 'America/Manaus', start: '2026-09-25T07:15:00-04:00' } })
+    const overridden = request('5pm to Brazil', { targetZone: 'America/Manaus' })
+    expect(overridden).toMatchObject({ status: 'ok', target: { zone: 'America/Manaus' } })
+    expect(overridden.assumptions.map(x => x.code)).not.toContain('country_timezone_default')
+    expect(request('Brazil time')).toMatchObject({ status: 'ok', mode: 'current', source: { zone: 'America/Sao_Paulo' }, assumptions: [{ code: 'country_timezone_default' }] })
+    expect(request('5pm to Brazil', { sourceZone: 'Europe/London' })).toMatchObject({ status: 'ok', source: { zone: 'Europe/London' } })
+    expect(request('5pm to Springfield').field).toBe('targetZone')
+    expect(request('5pm to Brazil', { targetZone: 'Europe/London' }).status).toBe('invalid')
+  })
   test('ambiguous city, abbreviation, and numeric date', () => {
     expect(request('5pm Springfield to Nepal').field).toBe('sourceZone')
     expect(request('5pm IST to Nepal').field).toBe('sourceZone')
@@ -109,6 +140,41 @@ describe('translation', () => {
     expect(request('03/04 5pm Nepal to London', { dateOrder: 'DMY' }).source.start).toContain('2026-04-03')
     expect(request('03/04 5pm Nepal to London', { dateOrder: 'MDY' }).source.start).toContain('2026-03-04')
     expect(request('13/04 5pm Nepal to London').source.start).toContain('2026-04-13')
+  })
+  test('current-time conversions use one instant across cities worldwide', () => {
+    const destinations = {
+      Dubai: 'Asia/Dubai', Tokyo: 'Asia/Tokyo', Paris: 'Europe/Paris', Nairobi: 'Africa/Nairobi',
+      Auckland: 'Pacific/Auckland', Lima: 'America/Lima', Sydney: 'Australia/Sydney',
+      'São Paulo': 'America/Sao_Paulo', Zürich: 'Europe/Zurich', 'Springfield MO': 'America/Chicago',
+      'America/Argentina/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+    }
+    for (const [place, zone] of Object.entries(destinations)) {
+      const result = request(`current time to ${place} time`)
+      expect(result).toMatchObject({ status: 'ok', mode: 'conversion', source: { zone: 'Asia/Kathmandu' }, target: { zone, end: null } })
+      expect(DateTime.fromISO(result.source.start).toMillis()).toBe(now.toMillis())
+      expect(DateTime.fromISO(result.target.start).toMillis()).toBe(now.toMillis())
+      expect(result.assumptions.map(x => x.code)).not.toContain('source_today')
+    }
+    expect(request('current time to Dubai time').display).toEqual({ source: { start: '5:45 AM', end: null }, target: { start: '4:00 AM', end: null } })
+    expect(request('convert my current time to Dubai in 24-hour format').display.target.start).toBe('04:00')
+    expect(request('now London to Tokyo')).toMatchObject({ status: 'ok', source: { start: '2026-09-25T01:00:00+01:00' }, target: { start: '2026-09-25T09:00:00+09:00' } })
+    expect(request('current time in Dubai')).toMatchObject({ status: 'ok', mode: 'current', source: { zone: 'Asia/Dubai' } })
+    expect(request('now to Dubai', {}, '').field).toBe('sourceZone')
+    expect(request('current time to Atlantis time').status).not.toBe('ok')
+    expect(request('current nonsense to Dubai time').status).toBe('invalid')
+  })
+  test('country defaults apply globally and explicit cities take precedence', () => {
+    for (const [country, zone] of Object.entries({ Brazil: 'America/Sao_Paulo', 'United States': 'America/New_York', Canada: 'America/Toronto', Russia: 'Europe/Moscow', Australia: 'Australia/Sydney' })) {
+      const result = request(`5pm to ${country}`)
+      expect(result).toMatchObject({ status: 'ok', target: { zone } })
+      expect(result.assumptions.map(x => x.code)).toContain('country_timezone_default')
+    }
+    expect(request('5pm to Perth Australia')).toMatchObject({ status: 'ok', target: { zone: 'Australia/Perth' } })
+    expect(request('5pm to Australia', { targetZone: 'Australia/Perth' })).toMatchObject({ status: 'ok', target: { zone: 'Australia/Perth' } })
+    expect(request('5pm to Australia', { targetZone: 'Europe/London' }).status).toBe('invalid')
+    expect(request('5pm to São Paulo')).toMatchObject({ status: 'ok', target: { zone: 'America/Sao_Paulo' } })
+    expect(request('5pm to Zürich')).toMatchObject({ status: 'ok', target: { zone: 'Europe/Zurich' } })
+    expect(request('5pm to Springfield').field).toBe('targetZone')
   })
   test('common city acronyms resolve in timezone positions', () => {
     expect(request('5pm SF to London').source.zone).toBe('America/Los_Angeles')
@@ -158,6 +224,11 @@ describe('translation', () => {
 })
 
 describe('API shapes', () => {
+  test('local-to-Brazil conversion succeeds in one request', async () => {
+    const { response, body } = await post({ prompt: '5pm to brazil time', deviceTimeZone: 'Asia/Kathmandu' })
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ status: 'ok', mode: 'conversion', source: { zone: 'Asia/Kathmandu' }, target: { zone: 'America/Sao_Paulo' }, display: { source: { start: '5:00 PM' }, target: { start: '8:15 AM' } } })
+  })
   test('ok', async () => {
     const { response, body } = await post({ prompt: '5pm Nepal to London', deviceTimeZone: 'Asia/Kathmandu' })
     expect(response.status).toBe(200)
