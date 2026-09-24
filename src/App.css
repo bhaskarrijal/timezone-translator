@@ -18,18 +18,18 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --page: #141b1e;
-  --surface: #1e282c;
-  --surface-soft: #253136;
-  --result-surface: #253136;
-  --result-border: #3b4b51;
-  --text: #edf3f2;
-  --muted: #adbdc2;
-  --border: #3b4b51;
-  --input-border: #596a70;
-  --action: #102d51;
-  --action-text: #ffffff;
-  --focus: #8bc8d9;
+  --page: #292928;
+  --surface: #222221;
+  --surface-soft: #30302e;
+  --result-surface: #30302e;
+  --result-border: #4b4b47;
+  --text: #f2f1ed;
+  --muted: #bab9b2;
+  --border: #4b4b47;
+  --input-border: #74746d;
+  --action: #ffffff;
+  --action-text: #292928;
+  --focus: #c9c8bf;
   --error: #ffaaa3;
   --hero-background: linear-gradient(to bottom, #0d243e 0%, #214c7b 100%);
 }
@@ -96,6 +96,11 @@ h3 {
   color: var(--text);
   background: var(--surface);
   box-sizing: border-box;
+}
+
+:root[data-theme='dark'] .prompt-form input,
+:root[data-theme='dark'] .answer-form input {
+  background: #222221;
 }
 
 input:focus,
