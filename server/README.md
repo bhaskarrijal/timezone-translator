@@ -1,37 +1,12 @@
-# Timezone Translator Backend
+# Timezone Translator API
 
-Simple Node.js backend for the timezone translator application.
-
-## Setup
-
-1. Install dependencies:
+Express API running with Bun. No API key is needed.
 
 ```bash
-cd server
-npm install
+bun install --frozen-lockfile
+bun run dev
 ```
 
-2. Set up environment variables:
-   Create a `.env` file in the server directory with:
+`POST /api/translate` accepts a JSON body with `prompt`, optional `deviceTimeZone` (IANA name), and optional `answers` (string values keyed by clarification field). The endpoint is stateless: send the original prompt again with each new answer. It returns `status: "ok"`, `"needs_clarification"`, or `"invalid"`. Successful results retain offset-bearing ISO values and include `timeFormat` plus formatted `display` times that follow the request's 12-hour or 24-hour notation. For a single-place current-time query such as `UK time`, `mode` is `current` and `target` is `null`. Invalid requests use HTTP 400. `GET /api/health` returns `{ "status": "ok" }`.
 
-```
-GOOGLE_GENERATIVE_AI_API_KEY=your_api_key_here
-```
-
-3. Start the server:
-
-```bash
-npm run dev
-```
-
-The server will run on port 3001 by default.
-
-## API Endpoints
-
-- `POST /api/translate` - Translate timezone prompts
-- `GET /api/health` - Health check endpoint
-
-## Development
-
-- `npm run dev` - Start with auto-reload
-- `npm start` - Start production server
+Run `bun test` to check parsing, conversions, clarifications, and API response shapes.

@@ -3,14 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "bun@1.3.8",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "vercel-build": "npm run build"
+    "vercel-build": "bun run build"
   },
   "dependencies": {
+    "iconoir-react": "^7.12.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "bunVersion": "1.x",
   "builds": [
     { "src": "server.js", "use": "@vercel/node" }
   ],

@@ -1,189 +1,171 @@
-"use client"
+import { useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import { MoonSat, SunLight } from 'iconoir-react'
 
-import type React from "react"
-import { useState, useRef, useEffect } from "react"
+type Option = { value: string; label: string }
+type DisplayTime = { start: string; end: string | null }
+type ZoneTime = { zone: string; start: string; end: string | null }
+type Result =
+  | { status: 'ok'; mode: 'conversion'; source: ZoneTime; target: ZoneTime; timeFormat: '12h' | '24h'; display: { source: DisplayTime; target: DisplayTime }; assumptions: { code: string; message: string }[] }
+  | { status: 'ok'; mode: 'current'; place: string; source: ZoneTime; target: null; timeFormat: '12h' | '24h'; display: { source: DisplayTime; target: null }; assumptions: [] }
+  | { status: 'needs_clarification'; field: string; question: string; inputKind: 'choice' | 'text'; options: Option[] }
+  | { status: 'invalid'; code: string; message: string }
+
+const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '')
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+function formatDate(iso: string) {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number)
+  return `${day} ${monthNames[month - 1]}, ${year}`
+}
+
+function placeName(zone: string) {
+  return zone.split('/').at(-1)?.replaceAll('_', ' ') ?? zone
+}
+
+function offsetLabel(iso: string) {
+  return iso.match(/([+-]\d{2}:\d{2})$/)?.[1] ?? '+00:00'
+}
+
+function DateTimeFields({ label, place, zone, start, end, display }: { label?: string; place?: string; zone: string; start: string; end: string | null; display: DisplayTime }) {
+  const rows = [{ label: end ? 'Start' : null, value: start, time: display.start }, ...(end ? [{ label: 'End', value: end, time: display.end }] : [])]
+  return <div className="result-side">
+    {label && <h3>{label}</h3>}
+    <p className="place">{place ?? placeName(zone)}</p>
+    <p className="zone">{zone}</p>
+    {rows.map(row => <div className="time-row" key={row.label}>
+      {row.label && <span className="row-label">{row.label}</span>}
+      <div><strong>{row.time}</strong><span className="offset">UTC{offsetLabel(row.value)}</span></div>
+      <div className="date">{formatDate(row.value)}</div>
+    </div>)}
+  </div>
+}
 
 function App() {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    inputRef.current?.focus()
-    const handler = () => {
-      inputRef.current?.focus()
-    }
-    document.addEventListener("keydown", handler)
-    return () => document.removeEventListener("keydown", handler)
-  }, [])
-
-  const [input, setInput] = useState("")
+  const [prompt, setPrompt] = useState('')
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [result, setResult] = useState<Result | null>(null)
+  const [textAnswer, setTextAnswer] = useState('')
   const [loading, setLoading] = useState(false)
-  const [output, setOutput] = useState<string>("")
-  const [displayedOutput, setDisplayedOutput] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [networkError, setNetworkError] = useState('')
+  const request = useRef<AbortController | null>(null)
+  const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setOutput("")
-
+  function toggleTheme() {
+    const nextDark = !isDark
+    setIsDark(nextDark)
+    if (nextDark) document.documentElement.dataset.theme = 'dark'
+    else delete document.documentElement.dataset.theme
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      if (nextDark) window.localStorage.setItem('timezone-theme', 'dark')
+      else window.localStorage.removeItem('timezone-theme')
+    } catch { /* Theme still changes when storage is unavailable. */ }
+  }
+
+  async function translate(nextAnswers: Record<string, string>) {
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
+    setLoading(true)
+    setNetworkError('')
+    setResult(null)
+    try {
       const response = await fetch(`${apiUrl}/api/translate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt: input }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          deviceTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          answers: nextAnswers,
+        }),
+        signal: controller.signal,
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to translate')
-      }
-
-      const data = await response.json()
-      setOutput(data.translation)
-    } catch (err: any) {
-      setError(err.message || "An error occurred.")
+      const data: Result = await response.json()
+      if (!['ok', 'needs_clarification', 'invalid'].includes(data.status)) throw new Error('Unexpected response from server.')
+      setResult(data)
+      if (data.status === 'needs_clarification') setTextAnswer('')
+    } catch (error) {
+      if (controller.signal.aborted) return
+      setNetworkError(error instanceof Error ? error.message : 'Could not reach the server.')
     } finally {
-      setLoading(false)
+      if (request.current === controller) setLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (output) {
-      setDisplayedOutput("")
-      let idx = 0
-      const speed = 10 // per char ko speed
-      const interval = setInterval(() => {
-        setDisplayedOutput(output.slice(0, idx + 1))
-        idx++
-        if (idx >= output.length) clearInterval(interval)
-      }, speed)
-      return () => clearInterval(interval)
-    }
-  }, [output])
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setAnswers({})
+    void translate({})
+  }
 
-  return (
-    <>
-      <style>
-        {`
-          .app-container {
-            line-height: 1.5;
-            font-family: serif;
-            font-size: 16px;
-            margin: 50px auto;
-            max-width: 590px;
-            padding: 0 16px;
-          }
-          @media (min-width: 768px) {
-            .app-container {
-              padding: 0;
-            }
-          }
-        `}
-      </style>
-      <div className="app-container">
-        <main style={{ marginTop: '70px' }}>
-          <header>
-            <h1 style={{ 
-              fontSize: '25px', 
-              marginBottom: '0',
-              fontWeight: 'bold'
-            }}>
-              Timezone Translator
-            </h1>
-            <p style={{ marginTop: '0' }}>
-              Quickly convert times across any timezones with NLP-powered accuracy.
-            </p>
-          </header>
+  function answer(field: string, value: string) {
+    const next = { ...answers, [field]: value }
+    setAnswers(next)
+    void translate(next)
+  }
 
-          <section>
-            <form onSubmit={handleSubmit} style={{ marginTop: '30px' }}>
-              <div style={{ marginBottom: '20px' }}>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="e.g. 3PM EST to Nepal time"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 0',
-                    fontSize: '16px',
-                    border: 'none',
-                    borderBottom: '1px solid #000',
-                    outline: 'none',
-                    backgroundColor: 'transparent',
-                    fontFamily: 'inherit'
-                  }}
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={loading}
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '16px',
-                  backgroundColor: '#000',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1,
-                  fontFamily: 'inherit'
-                }}
-              >
-                {loading ? 'Translating...' : 'Translate'}
-              </button>
-            </form>
-          </section>
-
-          {displayedOutput && (
-            <section style={{ marginTop: '40px' }}>
-              <p style={{ 
-                whiteSpace: 'pre-wrap',
-                // fontFamily: 'monospace',
-                fontSize: '14px',
-                // lineHeight: '1.5',
-                margin: '0',
-                padding: '5px',
-                backgroundColor: '#0000ff',
-                color: '#fff',
-              }}>
-                {displayedOutput}
-              </p>
-            </section>
-          )}
-
-          {error && (
-            <section style={{ marginTop: '20px' }}>
-              <p style={{ 
-                color: '#d32f2f',
-                margin: '0'
-              }}>
-                {error}
-              </p>
-            </section>
-          )}
-
-          <footer style={{ marginTop: '40px' }}>
-                <hr style={{ borderTop: '1px solid #ebebeb' }}/>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '-10px' }}>
-                    <p style={{ fontSize: '12px' }}>
-                        Built by <a href="https://bhaskarrijal.me" target="_blank" rel="noopener">Bhaskar Rijal</a> / 07.31.2025
-                    </p>
-                    <p style={{ fontSize: '12px', display: 'flex', gap: '5px', alignItems: 'center' }}>
-                        <span>open for collaborations</span> 
-                        <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="15px" width="15px" xmlns="http://www.w3.org/2000/svg"><path d="M12 4m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path><path d="M4 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path><path d="M20 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path><path d="M12 20m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path><path d="M5.5 5.5l3 3"></path><path d="M15.5 15.5l3 3"></path><path d="M18.5 5.5l-3 3"></path><path d="M8.5 15.5l-3 3"></path></svg>
-                    </p>
-                </div>
-            </footer>
-        </main>
+  return <>
+    <header className="site-hero">
+      <div className="site-hero-inner">
+        <h1>Timezone Translator</h1>
+        <p>Turn a time request into a clear conversion across cities and timezones.</p>
       </div>
-    </>
-  )
+    </header>
+    <main className="app">
+    <form onSubmit={submit} className="prompt-form">
+      <label htmlFor="prompt">Your time request</label>
+      <input id="prompt" type="text" value={prompt} maxLength={500} required
+        placeholder="5pm Nepal time to London time"
+        onChange={event => {
+          request.current?.abort()
+          setPrompt(event.target.value)
+          setAnswers({})
+          setResult(null)
+          setNetworkError('')
+          setLoading(false)
+        }} />
+      <p className="hint">Also try “UK time”, “5pm SF to London”, or “nepal ma 5 bajda london ma kati bajcha”.</p>
+      <button type="submit" disabled={loading}>{loading ? 'Translating…' : 'Translate'}</button>
+    </form>
+
+    {result?.status === 'needs_clarification' && <section className="response" aria-live="polite">
+      <h2>One more detail</h2>
+      <p>{result.question}</p>
+      {result.inputKind === 'choice' ? <div className="options">
+        {result.options.map(option => <button type="button" className="option" key={option.value}
+          disabled={loading} onClick={() => answer(result.field, option.value)}>{option.label}</button>)}
+      </div> : <form className="answer-form" onSubmit={event => { event.preventDefault(); if (textAnswer.trim()) answer(result.field, textAnswer.trim()) }}>
+        <input aria-label={result.question} value={textAnswer} onChange={event => setTextAnswer(event.target.value)} required />
+        <button type="submit" disabled={loading}>Continue</button>
+      </form>}
+    </section>}
+
+    {result?.status === 'ok' && <section className="response conversion" aria-live="polite">
+      <h2>{result.mode === 'current' ? 'Current time' : 'Conversion'}</h2>
+      <div className={`result-grid${result.mode === 'current' ? ' single' : ''}`}>
+        <DateTimeFields label={result.mode === 'conversion' ? 'Source' : undefined} place={result.mode === 'current' ? result.place : undefined} {...result.source} display={result.display.source} />
+        {result.mode === 'conversion' && <DateTimeFields label="Destination" {...result.target} display={result.display.target} />}
+      </div>
+      {result.assumptions.length > 0 && <div className="assumptions">
+        {result.assumptions.map(item => <p key={item.code}>{item.message}</p>)}
+      </div>}
+    </section>}
+
+    {result?.status === 'invalid' && <p className="error" role="alert">{result.message}</p>}
+    {networkError && <p className="error" role="alert">{networkError}</p>}
+
+    <p className="disclaimer">This app doesn't save your prompt, browser timezone, or clarification answers. They're sent to the server for the calculation, with no account, saved history, or session kept for them. It first cleans up common English and romanized Nepali wording, then reads the time, date, and any range you gave. Place names and shortcuts like SF are matched to IANA timezones. Each time is converted using the offset that applies on its actual date, so daylight saving changes are included rather than treating the difference between two places as fixed all year. If you leave out the date, it uses today in the source timezone. If you leave out the source, it uses the timezone your browser reports and marks that as an assumption. A range that ends earlier than it starts is treated as ending the next day. If a city name, numeric date, AM/PM choice, or repeated daylight saving hour could mean more than one thing, it asks before converting. A local time that never occurs during a clock change is flagged as well. No AI model is involved; the result is calculated with code.</p>
+
+    <footer>
+      <span>Built by <a href="https://bhaskarrijal.me" target="_blank" rel="noopener noreferrer">Bhaskar Rijal</a></span>
+      <button className="theme-toggle" type="button" onClick={toggleTheme}
+        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+        {isDark ? <SunLight width={16} height={16} strokeWidth={1.7} /> : <MoonSat width={16} height={16} strokeWidth={1.7} />}
+      </button>
+    </footer>
+    </main>
+  </>
 }
 
 export default App

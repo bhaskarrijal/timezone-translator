@@ -1,131 +1,42 @@
-import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateObject } from 'ai'
 import { z } from 'zod'
-import { DateTime } from 'luxon'
+import { translate } from './translator.js'
 
 const app = express()
-const PORT = process.env.PORT || 3001
-// rate limiting
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-})
-app.use('/api/', apiLimiter)
+const port = process.env.PORT || 3001
 
-// middleware 
+app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-8', legacyHeaders: false }))
 app.use(cors({
-  origin: [
-    'https://tt.bhaskarrijal.me',
-    'https://www.tt.bhaskarrijal.me'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: ['https://tt.bhaskarrijal.me', 'https://www.tt.bhaskarrijal.me', /^http:\/\/(?:localhost|127\.0\.0\.1):517\d$/],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
 }))
-app.use(express.json())
+app.use(express.json({ limit: '10kb' }))
 
-// user prompt lai JSON ma parse garne schema
-const parseSchema = z.object({
-  datetime: z.object({
-    date: z.string(),
-    time: z.string(),
-    range_end: z.string().nullable(),
-  }),
-  from_timezone: z.string(),
-  to_timezone: z.string(),
-})
+const requestSchema = z.object({
+  prompt: z.string().min(1).max(500),
+  deviceTimeZone: z.string().optional(),
+  answers: z.record(z.string(), z.string()).optional(),
+}).strict()
 
-// gAI init
-const googleAI = createGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-})
-
-// translation endpoint
-app.post('/api/translate', async (req, res) => {
+app.post('/api/translate', (req, res) => {
+  const parsed = requestSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ status: 'invalid', code: 'invalid_request', message: 'Send a prompt, deviceTimeZone, and optional text answers.' })
+  }
   try {
-    const { prompt } = req.body
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' })
-    }
-
-
-
-    // phase 1 -- parsing
-    const { object: parsed } = await generateObject({
-      model: googleAI("gemini-2.0-flash"),
-      schema: parseSchema,
-      system: `You are a JSON parser that extracts date-time translation details from the query.
-Return only a JSON object with the following structure:
-{
-  "datetime": { "date": "YYYY-MM-DD", "time": "HH:mm", "range_end": null },
-  "from_timezone": "IANA_TIMEZONE",
-  "to_timezone": "IANA_TIMEZONE"
-}
-Do not include any explanations or extra keys.`,
-      prompt: `<query>${prompt}</query>`,
-    })
-
-
-
-    // phase 2 -- conversion
-    const { date, time } = parsed.datetime
-    const sourceDT = DateTime.fromISO(`${date}T${time}`, { zone: parsed.from_timezone })
-    const targetDT = sourceDT.setZone(parsed.to_timezone)
-
-    // timezone le daylight saving time support garcha gardeina check 
-    const year = sourceDT.year
-    const hour = sourceDT.hour
-    const minute = sourceDT.minute
-    const zone = parsed.from_timezone
-    const targetZone = parsed.to_timezone
-
-    const winterDT = DateTime.fromObject({ year, month: 1, day: 1, hour, minute }, { zone })
-    const summerDT = DateTime.fromObject({ year, month: 7, day: 1, hour, minute }, { zone })
-    const winterTarget = winterDT.setZone(targetZone)
-    const summerTarget = summerDT.setZone(targetZone)
-
-
-    const supportsDST = winterDT.offset !== summerDT.offset
-
-    let translation
-    if (supportsDST) {
-      const winterAbbr = winterDT.offsetNameShort
-      const summerAbbr = summerDT.offsetNameShort
-      const winterTargetAbbr = winterTarget.offsetNameShort
-      const summerTargetAbbr = summerTarget.offsetNameShort
-
-      const fmtWinter = `${winterDT.toFormat("h:mm a")} ${zone} (${winterAbbr}) → ${winterTarget.toFormat("h:mm a")} ${targetZone} (${winterTargetAbbr})`
-      const fmtSummer = `${summerDT.toFormat("h:mm a")} ${zone} (${summerAbbr}) → ${summerTarget.toFormat("h:mm a")} ${targetZone} (${summerTargetAbbr})`
-
-      translation = `Timezone supports DST —\n${fmtWinter}\n${fmtSummer}`
-    } else {
-      // no DST -- only actual conversion with abbrs
-      const sourceAbbr = sourceDT.offsetNameShort
-      const targetAbbr = targetDT.offsetNameShort
-      translation = `${sourceDT.toFormat("h:mm a")} ${zone} (${sourceAbbr}) → ${targetDT.toFormat("h:mm a")} ${targetZone} (${targetAbbr})`
-    }
-
-
-    res.json({ translation })
+    const result = translate(parsed.data)
+    return res.status(result.status === 'invalid' ? 400 : 200).json(result)
   } catch (error) {
     console.error('Translation error:', error)
-    res.status(500).json({ error: error.message || 'An error occurred during translation' })
+    return res.status(500).json({ status: 'invalid', code: 'server_error', message: 'Could not translate this request.' })
   }
 })
 
-// health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' })
-})
+app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-  console.log(`Key loaded: ${process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'Yes' : 'No'}`)
-}) 
+if (process.env.NODE_ENV !== 'test') app.listen(port, () => console.log(`Server running on port ${port}`))
+
+export default app

@@ -2,17 +2,17 @@
   "name": "timezone-translator-server",
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "bun@1.3.8",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "build": "npm install && npm install --only=dev && npm install --only=production"
+    "start": "bun server.js",
+    "dev": "bun --watch server.js",
+    "test": "bun test"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.2.22",
-    "ai": "^3.0.0",
+    "chrono-node": "^2.10.1",
+    "city-timezones": "^1.3.4",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "express-rate-limit": "^8.0.1",
     "luxon": "^3.7.1",
