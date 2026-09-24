@@ -92,7 +92,7 @@ h3 {
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--text);
   background: var(--surface);
   box-sizing: border-box;
@@ -117,7 +117,7 @@ button:focus-visible {
 
 button {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 0;
   border: 1px solid var(--action);
   padding: 10px 18px;
   color: var(--text);
@@ -129,17 +129,111 @@ button:disabled {
   cursor: default;
 }
 
-.prompt-form>button,
+.translate-button,
 .answer-form button {
   width: fit-content;
   color: var(--action-text);
   background: var(--action);
 }
 
-.prompt-form>.translate-button {
+.translate-button {
   display: inline-grid;
   place-items: center;
   position: relative;
+}
+
+.translate-row {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.translate-row > .translate-button {
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.pigeon-scene {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+}
+
+.pigeon-hills {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--text);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.hills-far { opacity: .07; }
+.hills-near { opacity: .1; }
+
+.pigeon-track {
+  position: absolute;
+  inset: 0 28px 0 0;
+}
+
+.pigeon-travel {
+  width: 100%;
+  animation: pigeon-crossing 18s linear infinite;
+}
+
+.pigeon-bob {
+  width: 28px;
+  height: 24px;
+  animation: pigeon-bob 1.8s ease-in-out infinite;
+}
+
+.pixel-pigeon {
+  display: block;
+  color: var(--action);
+  animation: pigeon-turn 18s steps(1, end) infinite;
+}
+
+.pigeon-wing-up { animation: pigeon-flap .36s steps(1, end) infinite; }
+.pigeon-wing-down { animation: pigeon-flap .36s steps(1, end) infinite reverse; }
+
+@keyframes pigeon-crossing {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(100%); }
+}
+
+@keyframes pigeon-turn {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(-1); }
+}
+
+@keyframes pigeon-bob {
+  0%, 100% { transform: translateY(1px); }
+  50% { transform: translateY(5px); }
+}
+
+@keyframes pigeon-flap {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pigeon-travel,
+  .pigeon-bob,
+  .pixel-pigeon,
+  .pigeon-wing-up,
+  .pigeon-wing-down {
+    animation: none;
+  }
+
+  .pigeon-travel { transform: translateX(40%); }
+  .pigeon-wing-down { opacity: 0; }
 }
 
 .translate-button-label.hidden {

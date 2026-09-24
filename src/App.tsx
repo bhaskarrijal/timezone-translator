@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { MoonSat, SunLight } from 'iconoir-react'
+import { PigeonFlight } from './PigeonFlight'
 
 type Option = { value: string; label: string }
 type DisplayTime = { start: string; end: string | null }
@@ -125,6 +126,7 @@ function App() {
           setLoading(false)
         }} />
       <p className="hint">Also try “UK time”, “5pm SF to London”, or “nepal ma 5 bajda london ma kati bajcha”.</p>
+      <div className="translate-row">
       <button className="translate-button" type="submit" disabled={loading} aria-busy={loading}>
         <span className={loading ? 'translate-button-label hidden' : 'translate-button-label'} aria-hidden={loading}>Translate</span>
         {loading && <span className="loading-indicator" role="status" aria-label="loading">
@@ -147,6 +149,8 @@ function App() {
           <span className="sr-only">Loading...</span>
         </span>}
       </button>
+      <PigeonFlight />
+      </div>
     </form>
 
     {result?.status === 'needs_clarification' && <section className="response" aria-live="polite">
